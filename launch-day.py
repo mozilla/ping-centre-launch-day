@@ -16,10 +16,17 @@ RS_HOST, RS_PORT, RS_DB, DASH_USER, DASH_PASSWORD, DASH_KEY_ID, DASH_ACCESS_KEY,
                      ('DASH_PASSWORD', None), ('DASH_KEY_ID', None), ('DASH_ACCESS_KEY', None), ('DASH_BUCKET', None))))
 
 
-BASE_QUERY = """
+TOTAL_QUERY = """
 select count(distinct client_id) as total
+from assa_sessions_daily"""
+# where date >= '2017-11-14' and version = '57.0' and release_channel = 'release'"""
+
+COUNTRY_QUERY = """
+select country_code, count(distinct client_id) as total
 from assa_sessions_daily
-where date >= '2017-11-14' and version = '57.0' and release_channel = 'release'"""
+group by country_code"""
+# where date >= '2017-11-14' and version = '57.0' and release_channel = 'release'
+# group by country_code"""
 
 
 def _connect(host='localhost', port=None, database=None, user='postgres', password=None):
@@ -53,15 +60,20 @@ def _upload_s3(datafile, key_id, access_key, bucket_name, key):
 
 def run(event, context):
     _, curr = _connect(RS_HOST, RS_PORT, RS_DB, DASH_USER, DASH_PASSWORD)
-    result = {'total': 0, 'countries': None}
+    result = {'total': 0, 'countries': {}}
 
-    print("File: %s" % tmp.name)
-    print("Query: %s" % BASE_QUERY)
-    for record in _query(curr, BASE_QUERY):
-        result['total'] = int(record)
-        print record
+    print("Query: %s" % TOTAL_QUERY)
+    for record in _query(curr, TOTAL_QUERY):
+        result['total'] = record['total']
 
+    for record in _query(curr, COUNTRY_QUERY):
+        result['countries'][record['country_code']] = record['total']
+
+    json_result = json.dumps(result)
     tmp = tempfile.NamedTemporaryFile(delete=False, prefix='dash', dir='/tmp')
+    print("File: %s" % tmp.name)
+    print("JSON: %s" % json_result)
+    tmp.write(json_result)
     tmp.flush()
     tmp.close()
 
@@ -69,7 +81,9 @@ def run(event, context):
 
     print("Uploaded %s" % s3file)
     os.unlink(tmp.name)
-    sys.stdout.flush()
 
     print("done")
+    sys.stdout.flush()
 
+if __name__ == '__main__':
+    run(None, None)
