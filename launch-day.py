@@ -9,6 +9,7 @@ import sys
 import json
 from psycopg2.extras import DictCursor
 
+# add total newtabs, total ios users, total pocket stories read
 
 RS_HOST, RS_PORT, RS_DB, DASH_USER, DASH_PASSWORD, DASH_KEY_ID, DASH_ACCESS_KEY, DASH_BUCKET = \
     (x if x is not None else y for x, y in ((os.environ.get(x), y)
@@ -17,16 +18,20 @@ RS_HOST, RS_PORT, RS_DB, DASH_USER, DASH_PASSWORD, DASH_KEY_ID, DASH_ACCESS_KEY,
 
 
 TOTAL_QUERY = """
-select count(distinct client_id) as total
-from assa_sessions_daily"""
-# where date >= '2017-11-14' and version = '57.0' and release_channel = 'release'"""
+select count(distinct client_id) as total, count(*) as newtabs
+from assa_sessions_daily
+where version = '57.0' and release_channel = 'release'"""
+
+POCKET_QUERY = """
+select sum(clicks) as pocket_stories_read
+from assa_impression_stats_daily
+where version = '57.0' and release_channel = 'release'"""
 
 COUNTRY_QUERY = """
 select country_code, count(distinct client_id) as total
 from assa_sessions_daily
+where version = '57.0' and release_channel = 'release'
 group by country_code"""
-# where date >= '2017-11-14' and version = '57.0' and release_channel = 'release'
-# group by country_code"""
 
 
 def _connect(host='localhost', port=None, database=None, user='postgres', password=None):
@@ -61,11 +66,15 @@ def _upload_s3(datafile, key_id, access_key, bucket_name, key):
 
 def run(event, context):
     _, curr = _connect(RS_HOST, RS_PORT, RS_DB, DASH_USER, DASH_PASSWORD)
-    result = {'total': 0, 'countries': {}}
+    result = {'total': 0, 'newtabs': 0, 'pocket_stories_read': 0, 'countries': {}}
 
     print("Query: %s" % TOTAL_QUERY)
     for record in _query(curr, TOTAL_QUERY):
         result['total'] = record['total']
+        result['newtabs'] = record['newtabs']
+
+    for record in _query(curr, POCKET_QUERY):
+        result['pocket_stories_read'] = record['pocket_stories_read']
 
     for record in _query(curr, COUNTRY_QUERY):
         result['countries'][record['country_code']] = record['total']
