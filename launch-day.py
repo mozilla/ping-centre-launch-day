@@ -54,6 +54,7 @@ def _upload_s3(datafile, key_id, access_key, bucket_name, key):
     k = Key(bucket)
     k.key = key
 
+    k.set_metadata("Content-Type", "application/json")
     k.set_contents_from_filename(datafile, md5=md5, replace=True)
     return "s3://%s/%s" % (bucket_name, k.key)
 
